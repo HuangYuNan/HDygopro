@@ -1,0 +1,117 @@
+A launcher to make a HD ygopro
+
+#include <iostream>
+#include <Windows.h>
+
+
+#pragma comment(linker, "/subsystem:\"Windows\" /entry:\"mainCRTStartup\"")
+
+
+const int MAX_LEN = 256;
+const LPCSTR lpConfig = ".\\config.ini";
+typedef struct ProcessWindowInfo {
+DWORD dwProcessId;
+HWND hwndWindow;
+} ProcessWindowInfo, *pProcessWindowInfo;
+
+
+BOOL CALLBACK EnumWindowCallBack(HWND hWnd, LPARAM lParam)
+{
+
+
+DWORD dwProcessId;
+GetWindowThreadProcessId(hWnd, &dwProcessId);
+
+
+/* 判断是否是指定进程的主窗口 */
+pProcessWindowInfo pwi = (ProcessWindowInfo *)lParam;
+if (pwi->dwProcessId == dwProcessId && IsWindowVisible(hWnd) && GetParent(hWnd) == NULL) {
+pwi->hwndWindow = hWnd;
+return FALSE;
+}
+
+
+return TRUE;
+}
+
+
+void extra_action(char *target, char *target_delay) {
+LPSTR tmp = new char[MAX_LEN];
+DWORD stat = GetPrivateProfileString("config", target, "", tmp, sizeof(char)*MAX_LEN, lpConfig);
+if (!stat) {
+std::cerr << "open config.ini failed ..." << std::endl;
+}
+if (stat) {
+/* 打开文件 */
+STARTUPINFO _si;
+ZeroMemory(&_si, sizeof(STARTUPINFO)); _si.cb = sizeof(STARTUPINFO);
+PROCESS_INFORMATION _pi;
+ZeroMemory(&_pi, sizeof(PROCESS_INFORMATION));
+if (!CreateProcess(NULL, tmp, NULL, NULL, FALSE, 0, NULL, NULL, &_si, &_pi)) {
+std::cerr << "open process failed ..." << std::endl;
+}
+/* 延时 */
+int _delay;
+_delay = GetPrivateProfileInt("config", target_delay, 1000, lpConfig);
+Sleep(_delay);
+}
+delete[] tmp;
+}
+
+
+int main(int argc, char **argv)
+{
+std::cout << "screen scratcher ... 3.1415" << std::endl;
+
+
+/* 辅助功能，比如运行多个程序，如有需要，请仿照“创建进程”程序段更改 */
+extra_action("another_file_1", "another_delay_1");
+extra_action("another_file_2", "another_delay_2");
+extra_action("another_file_3", "another_delay_3");
+
+
+/* 创建进程 */
+LPSTR lpFilename = new char[MAX_LEN];
+if (!GetPrivateProfileString("config", "ygopro", "ygopro_vs.exe", lpFilename, sizeof(char)*MAX_LEN, lpConfig)) {
+std::cerr << "open config.ini failed ..." << std::endl;
+}
+STARTUPINFO si;
+ZeroMemory(&si, sizeof(STARTUPINFO)); si.cb = sizeof(STARTUPINFO);
+PROCESS_INFORMATION pi;
+ZeroMemory(&pi, sizeof(PROCESS_INFORMATION));
+if (argc > 1) {
+strcat_s(lpFilename, MAX_LEN, " ");
+strcat_s(lpFilename, MAX_LEN, argv[1]);
+}
+if (!CreateProcess(NULL, lpFilename, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+std::cerr << "open process failed ..." << std::endl;
+}
+delete[] lpFilename;
+
+
+/* 获取并修改窗口大小 */
+int cx, cy, delay;
+try {
+cy = GetPrivateProfileInt("config", "height", 800, lpConfig);
+cx = GetPrivateProfileInt("config", "weight", 600, lpConfig);
+delay = GetPrivateProfileInt("config", "delay", 1000, lpConfig);
+}
+catch (...) {
+std::cerr << "get arguments failed ..." << std::endl;
+}
+ProcessWindowInfo pwi{ pi.dwProcessId, NULL };
+WaitForInputIdle(pi.hProcess, 1000);
+EnumWindows(EnumWindowCallBack, (LPARAM)&pwi);
+
+
+/* 获取屏幕大小并设置尺寸 */
+RECT rScreenSize;
+SystemParametersInfo(SPI_GETWORKAREA, 0, (PVOID)&rScreenSize, 0);
+int screenX = rScreenSize.right - rScreenSize.left, screenY = rScreenSize.bottom - rScreenSize.top;
+int deltaX = screenX - cx, deltaY = screenY - cy;
+SetWindowPos(pwi.hwndWindow, HWND_NOTOPMOST, deltaX / 2, deltaY / 2, cx, cy, SWP_SHOWWINDOW);
+
+
+// system("pause");
+return 0;
+}
